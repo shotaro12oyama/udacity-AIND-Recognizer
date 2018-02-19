@@ -77,7 +77,20 @@ class SelectorBIC(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        max_prob = float("inf")
+        best_model = None
+        for n in range(self.min_n_components, self.max_n_components + 1):
+            try:
+                tmp_model = self.base_model(n)
+                logL = tmp_model.score(self.X, self.lengths)
+                p = n * (n-1) + (n-1) + 2 * self.X.shape[1] * n
+                tmp_score = (-2 * logL) + (p * np.log(self.X.shape[0]))
+                if tmp_score < max_prob:
+                    max_prob = tmp_score
+                    best_model = tmp_model
+            except:
+                pass
+        return best_model
 
 
 class SelectorDIC(ModelSelector):
@@ -94,7 +107,24 @@ class SelectorDIC(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        min_prob = float("-inf")
+        best_model = None
+        for n in range(self.min_n_components, self.max_n_components+1):
+            try:
+                tmp_model = self.base_model(n)
+                logL = tmp_model.score(self.X, self.lengths)
+                total_log = 0
+                for word in self.words:
+                    each_x, each_lengths = self.hwords[word]
+                    total_log += tmp_model.score(each_x, each_lengths)
+                avg_log = total_log/(len(self.words)-1)
+                tmp_score = logL - avg_log
+                if tmp_score > min_prob:
+                    min_prob = tmp_score
+                    best_model = tmp_model
+            except:
+                pass
+        return best_model
 
 
 class SelectorCV(ModelSelector):
@@ -106,4 +136,25 @@ class SelectorCV(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection using CV
-        raise NotImplementedError
+        best_score = float("-inf")
+        best_model = None
+        log_scores = []
+        for n in range(self.min_n_components, self.max_n_components + 1):
+            try:
+                kf = KFold(n_splits=min(3, len(self.sequences)))
+                for train_idx, test_idx in kf.split(self.sequences):
+                    X_train, length_train = combine_sequences(train_idx, self.sequences)
+                    X_test, length_test = combine_sequences(test_idx, self.sequences)
+                    tmp_model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000,
+                                    random_state=self.random_state, verbose=False).fit(X_train, length_train)
+                    log_scores.append(tmp_model.score(X_test, length_test))
+                    
+                    if np.mean(log_scores) > best_score:
+                        best_score = np.mean(log_scores)
+                        best_model = tmp_model
+            except:
+                pass
+
+        return best_model
+
+ 
